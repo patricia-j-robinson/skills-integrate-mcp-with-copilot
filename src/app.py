@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 import os
+import json
 from pathlib import Path
 
 app = FastAPI(title="Mergington High School API",
@@ -18,6 +19,15 @@ app = FastAPI(title="Mergington High School API",
 current_dir = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
           "static")), name="static")
+
+# Load teacher credentials
+def load_teachers():
+    teachers_file = Path(__file__).parent / "teachers.json"
+    with open(teachers_file, 'r') as f:
+        return json.load(f)
+
+# In-memory session storage (stores logged-in users)
+teacher_sessions = {}
 
 # In-memory activity database
 activities = {
@@ -130,3 +140,83 @@ def unregister_from_activity(activity_name: str, email: str):
     # Remove student
     activity["participants"].remove(email)
     return {"message": f"Unregistered {email} from {activity_name}"}
+
+
+@app.post("/login")
+def login(username: str, password: str):
+    """Authenticate a teacher"""
+    teachers_data = load_teachers()
+    
+    # Check credentials
+    for teacher in teachers_data["teachers"]:
+        if teacher["username"] == username and teacher["password"] == password:
+            # Generate a simple session ID (in production, use proper JWT)
+            session_id = f"{username}_{hash(username + password)}"
+            teacher_sessions[session_id] = username
+            return {"success": True, "session_id": session_id, "username": username}
+    
+    raise HTTPException(status_code=401, detail="Invalid credentials")
+
+
+@app.post("/logout")
+def logout(session_id: str):
+    """Logout a teacher"""
+    if session_id in teacher_sessions:
+        del teacher_sessions[session_id]
+    return {"message": "Logged out successfully"}
+
+
+@app.get("/verify-session")
+def verify_session(session_id: str):
+    """Verify if a session is valid"""
+    if session_id in teacher_sessions:
+        return {"valid": True, "username": teacher_sessions[session_id]}
+    return {"valid": False}
+
+
+@app.post("/admin/register-student")
+def admin_register_student(activity_name: str, email: str, session_id: str):
+    """Register a student for an activity (admin only)"""
+    # Verify session
+    if session_id not in teacher_sessions:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    # Validate activity exists
+    if activity_name not in activities:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    
+    activity = activities[activity_name]
+    
+    # Check capacity
+    if len(activity["participants"]) >= activity["max_participants"]:
+        raise HTTPException(status_code=400, detail="Activity is full")
+    
+    # Validate student is not already signed up
+    if email in activity["participants"]:
+        raise HTTPException(status_code=400, detail="Student is already signed up")
+    
+    # Add student
+    activity["participants"].append(email)
+    return {"message": f"Admin registered {email} for {activity_name}"}
+
+
+@app.delete("/admin/unregister-student")
+def admin_unregister_student(activity_name: str, email: str, session_id: str):
+    """Unregister a student from an activity (admin only)"""
+    # Verify session
+    if session_id not in teacher_sessions:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    # Validate activity exists
+    if activity_name not in activities:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    
+    activity = activities[activity_name]
+    
+    # Validate student is signed up
+    if email not in activity["participants"]:
+        raise HTTPException(status_code=400, detail="Student is not signed up for this activity")
+    
+    # Remove student
+    activity["participants"].remove(email)
+    return {"message": f"Admin unregistered {email} from {activity_name}"}
