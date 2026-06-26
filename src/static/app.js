@@ -4,7 +4,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const signupForm = document.getElementById("signup-form");
   const loginForm = document.getElementById("login-form");
   const logoutButton = document.getElementById("logout-button");
-  const authContainer = document.getElementById("auth-container");
   const signupContainer = document.getElementById("signup-container");
   const sessionInfo = document.getElementById("session-info");
   const welcomeText = document.getElementById("welcome-text");
@@ -39,10 +38,10 @@ document.addEventListener("DOMContentLoaded", () => {
   async function fetchCurrentUser() {
     try {
       const response = await fetch("/me");
-      if (!response.ok) {
-        currentUser = null;
-      } else {
+      if (response.ok) {
         currentUser = await response.json();
+      } else {
+        currentUser = null;
       }
     } catch (error) {
       currentUser = null;
@@ -71,10 +70,13 @@ document.addEventListener("DOMContentLoaded", () => {
               <h5>Participants:</h5>
               <ul class="participants-list">
                 ${details.participants
-                  .map(
-                    (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
-                  )
+                  .map((email) => {
+                    const removeButton =
+                      currentUser && email === currentUser.email
+                        ? `<button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button>`
+                        : "";
+                    return `<li><span class="participant-email">${email}</span>${removeButton}</li>`;
+                  })
                   .join("")}
               </ul>
             </div>`
@@ -112,6 +114,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const button = event.target;
     const activity = button.getAttribute("data-activity");
 
+    if (!currentUser) {
+      showMessage("You must be logged in to unregister.", "error");
+      return;
+    }
+
     try {
       const response = await fetch(
         `/activities/${encodeURIComponent(activity)}/unregister`,
@@ -135,6 +142,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   signupForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+
+    if (!currentUser) {
+      showMessage("You must be logged in to sign up.", "error");
+      return;
+    }
 
     const activity = document.getElementById("activity").value;
 
@@ -180,6 +192,7 @@ document.addEventListener("DOMContentLoaded", () => {
         showMessage("Login successful", "success");
         loginForm.reset();
         await fetchCurrentUser();
+        fetchActivities();
       } else {
         showMessage(result.detail || "Invalid credentials", "error");
       }
@@ -200,6 +213,7 @@ document.addEventListener("DOMContentLoaded", () => {
         showMessage(result.message, "success");
         currentUser = null;
         updateUI();
+        fetchActivities();
       } else {
         showMessage(result.detail || "Failed to log out", "error");
       }
