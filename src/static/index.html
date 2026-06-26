@@ -46,6 +46,26 @@
     </div>
 
     <main>
+      <section id="auth-container">
+        <h3>Login</h3>
+        <form id="login-form">
+          <div class="form-group">
+            <label for="login-email">Email:</label>
+            <input type="email" id="login-email" required placeholder="your-email@mergington.edu" />
+          </div>
+          <div class="form-group">
+            <label for="login-password">Password:</label>
+            <input type="password" id="login-password" required placeholder="password" />
+          </div>
+          <button type="submit">Log In</button>
+        </form>
+
+        <div id="session-info" class="hidden">
+          <p id="welcome-text"></p>
+          <button id="logout-button">Log Out</button>
+        </div>
+      </section>
+
       <section id="activities-container">
         <h3>Available Activities</h3>
         <div id="activities-list">
@@ -54,15 +74,13 @@
         </div>
       </section>
 
-      <section id="signup-container">
+      <div id="message" class="hidden"></div>
+
+      <section id="signup-container" class="hidden">
         <h3>Sign Up for an Activity</h3>
         <form id="signup-form">
           <div class="form-group">
-            <label for="email">Student Email:</label>
-            <input type="email" id="email" required placeholder="your-email@mergington.edu" />
-          </div>
-          <div class="form-group">
-            <label for="activity">Select Activity:</label>
+            <label for="activity">Select an activity:</label>
             <select id="activity" required>
               <option value="">-- Select an activity --</option>
               <!-- Activity options will be loaded here -->
@@ -70,7 +88,6 @@
           </div>
           <button type="submit">Sign Up</button>
         </form>
-        <div id="message" class="hidden"></div>
       </section>
     </main>
 
