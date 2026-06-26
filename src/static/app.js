@@ -3,6 +3,150 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const userIcon = document.getElementById("user-icon");
+  const loginModal = document.getElementById("login-modal");
+  const userInfoModal = document.getElementById("user-info-modal");
+  const loginForm = document.getElementById("login-form");
+  const closeLoginBtn = document.getElementById("close-login-btn");
+  const closeUserInfoBtn = document.getElementById("close-user-info-btn");
+  const logoutBtn = document.getElementById("logout-btn");
+  const userInfoDisplay = document.getElementById("user-info-display");
+  const loginMessage = document.getElementById("login-message");
+
+  // Session state
+  let currentSession = null;
+  let isLoggedIn = false;
+
+  // Load session from localStorage
+  function loadSession() {
+    const savedSession = localStorage.getItem("teacher_session");
+    if (savedSession) {
+      currentSession = JSON.parse(savedSession);
+      verifySession();
+    }
+  }
+
+  // Verify current session is still valid
+  async function verifySession() {
+    if (!currentSession) return;
+    
+    try {
+      const response = await fetch(`/verify-session?session_id=${currentSession.session_id}`);
+      const result = await response.json();
+      
+      if (result.valid) {
+        isLoggedIn = true;
+        showUserLoggedIn(currentSession.username);
+      } else {
+        currentSession = null;
+        localStorage.removeItem("teacher_session");
+        isLoggedIn = false;
+        showUserLoggedOut();
+      }
+    } catch (error) {
+      console.error("Error verifying session:", error);
+    }
+  }
+
+  // Show logged in state
+  function showUserLoggedIn(username) {
+    userIcon.textContent = "✅";
+    userIcon.style.cursor = "pointer";
+  }
+
+  // Show logged out state
+  function showUserLoggedOut() {
+    userIcon.textContent = "👤";
+    userIcon.style.cursor = "pointer";
+  }
+
+  // Handle user icon click
+  userIcon.addEventListener("click", () => {
+    if (isLoggedIn) {
+      // Show user info modal
+      userInfoDisplay.innerHTML = `<p><strong>Logged in as:</strong> ${currentSession.username}</p>`;
+      logoutBtn.classList.remove("hidden");
+      userInfoModal.classList.remove("hidden");
+    } else {
+      // Show login modal
+      loginModal.classList.remove("hidden");
+    }
+  });
+
+  // Close login modal
+  closeLoginBtn.addEventListener("click", () => {
+    loginModal.classList.add("hidden");
+    loginForm.reset();
+    loginMessage.classList.add("hidden");
+  });
+
+  // Close user info modal
+  closeUserInfoBtn.addEventListener("click", () => {
+    userInfoModal.classList.add("hidden");
+  });
+
+  // Handle login form submission
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+
+    try {
+      const response = await fetch(`/login?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`, {
+        method: "POST"
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        currentSession = {
+          session_id: result.session_id,
+          username: result.username
+        };
+        localStorage.setItem("teacher_session", JSON.stringify(currentSession));
+        isLoggedIn = true;
+        loginMessage.textContent = "Login successful!";
+        loginMessage.className = "success";
+        loginMessage.classList.remove("hidden");
+        
+        setTimeout(() => {
+          loginModal.classList.add("hidden");
+          loginForm.reset();
+          loginMessage.classList.add("hidden");
+          showUserLoggedIn(username);
+          fetchActivities();
+        }, 1000);
+      } else {
+        loginMessage.textContent = result.detail || "Login failed";
+        loginMessage.className = "error";
+        loginMessage.classList.remove("hidden");
+      }
+    } catch (error) {
+      loginMessage.textContent = "Failed to login. Please try again.";
+      loginMessage.className = "error";
+      loginMessage.classList.remove("hidden");
+      console.error("Error logging in:", error);
+    }
+  });
+
+  // Handle logout
+  logoutBtn.addEventListener("click", async () => {
+    try {
+      await fetch(`/logout?session_id=${currentSession.session_id}`, {
+        method: "POST"
+      });
+      
+      currentSession = null;
+      localStorage.removeItem("teacher_session");
+      isLoggedIn = false;
+      userInfoModal.classList.add("hidden");
+      showUserLoggedOut();
+      fetchActivities();
+    } catch (error) {
+      console.error("Error logging out:", error);
+    }
+  });
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -21,7 +165,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const spotsLeft =
           details.max_participants - details.participants.length;
 
-        // Create participants HTML with delete icons instead of bullet points
+        // Create participants HTML with delete icons only if logged in
         const participantsHTML =
           details.participants.length > 0
             ? `<div class="participants-section">
@@ -30,7 +174,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 ${details.participants
                   .map(
                     (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
+                      `<li><span class="participant-email">${email}</span>${
+                        isLoggedIn
+                          ? `<button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button>`
+                          : ""
+                      }</li>`
                   )
                   .join("")}
               </ul>
@@ -73,11 +221,18 @@ document.addEventListener("DOMContentLoaded", () => {
     const activity = button.getAttribute("data-activity");
     const email = button.getAttribute("data-email");
 
+    if (!currentSession) {
+      messageDiv.textContent = "You must be logged in as a teacher to remove students.";
+      messageDiv.className = "error";
+      messageDiv.classList.remove("hidden");
+      return;
+    }
+
     try {
       const response = await fetch(
-        `/activities/${encodeURIComponent(
+        `/admin/unregister-student?activity_name=${encodeURIComponent(
           activity
-        )}/unregister?email=${encodeURIComponent(email)}`,
+        )}&email=${encodeURIComponent(email)}&session_id=${encodeURIComponent(currentSession.session_id)}`,
         {
           method: "DELETE",
         }
@@ -156,5 +311,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Initialize app
+  loadSession();
   fetchActivities();
 });
